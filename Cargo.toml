@@ -1,14 +1,20 @@
 [package]
-name = "lmntal-lsp"
+name = "lmntal-language-server"
+description = "A language server for LMNtal"
 version = "0.1.0"
 edition = "2021"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+license = "MIT"
+readme = "README.md"
 
 [dependencies]
-tokio = { version = "1.34", features = ["full"] }
-tower-lsp = { version = "0.20", features = ["proposed"]}
+clap = { version = "4.5", features = ["derive"] }
+dashmap = "5.5"
+env_logger = "0.11"
+lmntalc = "0.11"
+log = "0.4"
+reqwest = { version = "0.11", features = ["json"] }
+semver = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-env_logger = "0.10"
-chumsky = "0.9"
+tokio = { version = "1.36", features = ["full"] }
+tower-lsp = { version = "0.20", features = ["proposed"] }

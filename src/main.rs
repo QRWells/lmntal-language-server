@@ -1,49 +1,47 @@
-use chumsky::Parser;
-use lmntal_lsp::parsing;
-use tower_lsp::jsonrpc::Result;
-use tower_lsp::lsp_types::*;
-use tower_lsp::{Client, LanguageServer, LspService, Server};
+pub mod analysis;
+pub mod backend;
+pub mod capabilities;
+pub mod config;
+pub mod diagnostics;
+pub mod reference;
+pub mod utils;
 
-pub struct Backend {
-    client: Client,
-}
+use backend::Backend;
+use clap::Parser;
+use tokio::net::TcpListener;
+use tower_lsp::{LspService, Server};
 
-#[tower_lsp::async_trait]
-impl LanguageServer for Backend {
-    #[doc = " The [`initialize`] request is the first request sent from the client to the server."]
-    #[doc = ""]
-    #[doc = " [`initialize`]: https://microsoft.github.io/language-server-protocol/specification#initialize"]
-    #[doc = ""]
-    #[doc = " This method is guaranteed to only execute once. If the client sends this request to the"]
-    #[doc = " server again, the server will respond with JSON-RPC error code `-32600` (invalid request)."]
-    #[must_use]
-    #[allow(clippy::type_complexity, clippy::type_repetition_in_bounds)]
-    async fn initialize(&self, params: InitializeParams) -> Result<InitializeResult> {
-        todo!()
-    }
-
-    #[doc = " The [`shutdown`] request asks the server to gracefully shut down, but to not exit."]
-    #[doc = ""]
-    #[doc = " [`shutdown`]: https://microsoft.github.io/language-server-protocol/specification#shutdown"]
-    #[doc = ""]
-    #[doc = " This request is often later followed by an [`exit`] notification, which will cause the"]
-    #[doc = " server to exit immediately."]
-    #[doc = ""]
-    #[doc = " [`exit`]: https://microsoft.github.io/language-server-protocol/specification#exit"]
-    #[doc = ""]
-    #[doc = " This method is guaranteed to only execute once. If the client sends this request to the"]
-    #[doc = " server again, the server will respond with JSON-RPC error code `-32600` (invalid request)."]
-    #[must_use]
-    #[allow(clippy::type_complexity, clippy::type_repetition_in_bounds)]
-    async fn shutdown(&self) -> Result<()> {
-        todo!()
-    }
+/// Simple program to greet a person
+#[derive(Parser, Debug)]
+#[command(name = "LMNtal Language Server")]
+#[command(author, version, about, long_about = None)]
+struct Args {
+    #[arg(short, long, help = "Port number to listen for incoming connections")]
+    port: Option<u16>,
 }
 
 #[tokio::main]
 async fn main() {
-    let src = std::fs::read_to_string(std::env::args().nth(1).unwrap()).unwrap();
+    let arg = Args::parse();
 
-    let parser = parsing::lexer().parse(src).unwrap();
-    println!("{:#?}", parser);
+    env_logger::init();
+
+    if let Some(port) = arg.port {
+        let addr = format!("127.0.0.1:{}", port);
+        let listener = TcpListener::bind(addr).await.unwrap();
+        let (stream, _) = listener.accept().await.unwrap();
+
+        let (read, write) = tokio::io::split(stream);
+        #[cfg(feature = "runtime-agnostic")]
+        let (read, write) = (read.compat(), write.compat_write());
+
+        let (service, socket) = LspService::build(Backend::new).finish();
+        Server::new(read, write, socket).serve(service).await;
+    } else {
+        let stdin = tokio::io::stdin();
+        let stdout = tokio::io::stdout();
+
+        let (service, socket) = LspService::build(Backend::new).finish();
+        Server::new(stdin, stdout, socket).serve(service).await;
+    }
 }
