@@ -1,10 +1,12 @@
 [package]
 name = "lmntal-language-server"
-description = "A language server for LMNtal"
+authors = ["QRWells <mr.qrwang@gmail.com>"]
+description = "A language server for LMNtal."
 version = "0.1.0"
 edition = "2021"
 license = "MIT"
 readme = "README.md"
+repository = "https://github.com/QRWells/lmntal-language-server"
 
 [dependencies]
 clap = { version = "4.5", features = ["derive"] }

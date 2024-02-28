@@ -1,6 +1,11 @@
-# LMNtal LSP
+# LMNtal Language Server
 
 An language server implementation for LMNtal.
+
+## Features
+
+- Semantic highlighting
+- Syntax and semantic error checking (WIP)
 
 ## License
 
