@@ -3,8 +3,9 @@ use tower_lsp::lsp_types::{SemanticToken, SemanticTokenType};
 pub const LEGEND_TYPE: &[SemanticTokenType] = &[
     SemanticTokenType::FUNCTION,  // Rule
     SemanticTokenType::NAMESPACE, // Membrane
-    SemanticTokenType::STRUCT,    // Atom
+    SemanticTokenType::CLASS,     // Atom
     SemanticTokenType::VARIABLE,  // Link
+    SemanticTokenType::STRUCT,    // Hyperlink
     SemanticTokenType::PROPERTY,  // Context
     SemanticTokenType::KEYWORD,
     SemanticTokenType::OPERATOR,
@@ -17,7 +18,12 @@ pub const RULE_LEGEND_TYPE: u32 = 0;
 pub const MEMBRANE_LEGEND_TYPE: u32 = 1;
 pub const ATOM_LEGEND_TYPE: u32 = 2;
 pub const LINK_LEGEND_TYPE: u32 = 3;
-pub const CONTEXT_LEGEND_TYPE: u32 = 4;
+pub const HYPERLINK_LEGEND_TYPE: u32 = 4;
+pub const CONTEXT_LEGEND_TYPE: u32 = 5;
+pub const KEYWORD_ATOM_LEGEND_TYPE: u32 = 6;
+pub const OPERATOR_ATOM_LEGEND_TYPE: u32 = 7;
+pub const STRING_ATOM_LEGEND_TYPE: u32 = 8;
+pub const NUMBER_ATOM_LEGEND_TYPE: u32 = 9;
 
 #[derive(Debug, Default)]
 pub struct Token {

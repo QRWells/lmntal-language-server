@@ -1,77 +1,8 @@
 use std::collections::HashMap;
 
 use lmntalc::util::Span;
-use tower_lsp::lsp_types::{Position, Range};
 
-/// A symbol in the source code.
-///
-/// The position is zero-based.
-#[derive(Debug, Copy, Clone)]
-pub struct Symbol {
-    line: u32,
-    col: u32,
-    length: usize,
-}
-
-impl Symbol {
-    fn new(span: Span) -> Self {
-        Self {
-            line: span.low().line,
-            col: span.low().column,
-            length: span.len(),
-        }
-    }
-
-    fn is_inside(&self, line: u32, col: u32) -> bool {
-        self.line == line && self.col <= col && col <= self.col + self.length as u32
-    }
-}
-
-impl PartialEq for Symbol {
-    fn eq(&self, other: &Self) -> bool {
-        self.line == other.line && self.col == other.col && self.length == other.length
-    }
-}
-
-impl Eq for Symbol {}
-
-impl std::hash::Hash for Symbol {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.line.hash(state);
-        self.col.hash(state);
-        self.length.hash(state);
-    }
-}
-
-impl std::cmp::Ord for Symbol {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.line
-            .cmp(&other.line)
-            .then(self.col.cmp(&other.col))
-            .then(self.length.cmp(&other.length))
-    }
-}
-
-impl std::cmp::PartialOrd for Symbol {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl From<Symbol> for Range {
-    fn from(val: Symbol) -> Self {
-        Range {
-            start: Position {
-                line: val.line,
-                character: val.col,
-            },
-            end: Position {
-                line: val.line,
-                character: val.col + val.length as u32,
-            },
-        }
-    }
-}
+use crate::symbol::Symbol;
 
 #[derive(Debug)]
 pub struct RefereceMap {
@@ -80,7 +11,7 @@ pub struct RefereceMap {
 }
 
 impl RefereceMap {
-    pub fn new(refs: Vec<Vec<Span>>) -> Self {
+    pub fn new(refs: Vec<Vec<Span>>, normal_symbol: Vec<Span>) -> Self {
         let mut symbol_seq = Vec::new();
         let mut references = HashMap::new();
 
@@ -89,6 +20,11 @@ impl RefereceMap {
                 let symbol = Symbol::new(*span);
                 symbol_seq.push(symbol);
             }
+        }
+
+        for span in &normal_symbol {
+            let symbol = Symbol::new(*span);
+            symbol_seq.push(symbol);
         }
 
         symbol_seq.sort();
@@ -122,18 +58,25 @@ impl RefereceMap {
         }
     }
 
-    pub fn query(&self, line: u32, col: u32) -> Option<Vec<Symbol>> {
+    pub fn query(&self, line: u32, col: u32) -> Option<Symbol> {
+        find(line, col, &self.symbol_seq).map(|i| self.symbol_seq[i])
+    }
+
+    pub fn query_references(&self, line: u32, col: u32) -> Option<Vec<Symbol>> {
         let index = find(line, col, &self.symbol_seq)?;
         let refs = self.references.get(&index)?;
         Some(refs.iter().map(|&i| self.symbol_seq[i]).collect())
     }
 
-    pub fn query_with_self(&self, line: u32, col: u32) -> Option<Vec<Symbol>> {
+    pub fn query_references_with_self(&self, line: u32, col: u32) -> Option<Vec<Symbol>> {
         let index = find(line, col, &self.symbol_seq)?;
-        let refs = self.references.get(&index)?;
-        let mut result = refs.iter().map(|&i| self.symbol_seq[i]).collect::<Vec<_>>();
-        result.push(self.symbol_seq[index]);
-        Some(result)
+        if let Some(refs) = self.references.get(&index) {
+            let mut result = refs.iter().map(|&i| self.symbol_seq[i]).collect::<Vec<_>>();
+            result.push(self.symbol_seq[index]);
+            Some(result)
+        } else {
+            Some(vec![self.symbol_seq[index]])
+        }
     }
 }
 

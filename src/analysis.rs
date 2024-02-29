@@ -4,11 +4,13 @@ pub mod semantic_token;
 use self::{
     rule::RuleAnalysisResult,
     semantic_token::{
-        Token, ATOM_LEGEND_TYPE, CONTEXT_LEGEND_TYPE, LINK_LEGEND_TYPE, MEMBRANE_LEGEND_TYPE,
+        Token, ATOM_LEGEND_TYPE, CONTEXT_LEGEND_TYPE, HYPERLINK_LEGEND_TYPE,
+        KEYWORD_ATOM_LEGEND_TYPE, LINK_LEGEND_TYPE, MEMBRANE_LEGEND_TYPE, NUMBER_ATOM_LEGEND_TYPE,
+        OPERATOR_ATOM_LEGEND_TYPE,
     },
 };
 use crate::utils::span_to_range;
-use lmntalc::{util::Span, ASTNode};
+use lmntalc::{frontend::ast::AtomName, util::Span, ASTNode};
 use std::collections::HashMap;
 use tower_lsp::lsp_types::{
     Diagnostic, DiagnosticRelatedInformation, DocumentSymbol, Location, SymbolKind, Url,
@@ -22,6 +24,7 @@ pub struct ProgramInfo {
     pub doc_symbol: Vec<DocumentSymbol>,
     pub diagnostics: Vec<Diagnostic>,
     pub refs: Vec<Vec<Span>>,
+    pub symbols: Vec<Span>,
 }
 
 #[derive(Debug)]
@@ -31,6 +34,7 @@ pub struct Analyzer<'ast> {
     semantic_tokens: Vec<Token>,
     diagnostics: Vec<Diagnostic>,
     refs: Vec<Vec<Span>>,
+    symbols: Vec<Span>,
 }
 
 #[derive(Debug, Default)]
@@ -48,12 +52,12 @@ impl<'ast> Analyzer<'ast> {
             semantic_tokens: Vec::new(),
             diagnostics: Vec::new(),
             refs: Vec::new(),
+            symbols: Vec::new(),
         }
     }
 
     pub fn analyze(mut self) -> ProgramInfo {
         let mut result = AnalysisResult::default();
-
         if let ASTNode::Membrane {
             process_lists,
             rules,
@@ -80,6 +84,7 @@ impl<'ast> Analyzer<'ast> {
             semantic_tokens: self.semantic_tokens,
             doc_symbol: result.symbols,
             refs: self.refs,
+            symbols: self.symbols,
             diagnostics: self.diagnostics,
         }
     }
@@ -106,25 +111,19 @@ impl<'ast> Analyzer<'ast> {
                 for arg in args {
                     result.extend(self.analyze_process(arg, false));
                 }
-
-                self.semantic_tokens.push(Token {
-                    line: name.1.low().line,
-                    col: name.1.low().column,
-                    length: name.1.len(),
-                    token_type: ATOM_LEGEND_TYPE,
-                });
+                let token_type = match name.0 {
+                    AtomName::Keyword(_) => KEYWORD_ATOM_LEGEND_TYPE,
+                    AtomName::Operator(_) => OPERATOR_ATOM_LEGEND_TYPE,
+                    AtomName::Int(_) | AtomName::Float(_) => NUMBER_ATOM_LEGEND_TYPE,
+                    _ => ATOM_LEGEND_TYPE,
+                };
+                self.add_symbol(name.1, token_type);
             }
             ASTNode::Link {
                 name,
                 hyperlink,
                 span,
             } => {
-                self.semantic_tokens.push(Token {
-                    line: span.low().line,
-                    col: span.low().column,
-                    length: span.len(),
-                    token_type: LINK_LEGEND_TYPE,
-                });
                 if top_level {
                     self.diagnostics.push(Diagnostic {
                         range: span_to_range(*span),
@@ -138,12 +137,14 @@ impl<'ast> Analyzer<'ast> {
                         code_description: None,
                     });
                 } else if *hyperlink {
+                    self.add_symbol(*span, HYPERLINK_LEGEND_TYPE);
                     result
                         .hyperlink_occurrences
                         .entry(name.clone())
                         .or_default()
                         .push(*span);
                 } else {
+                    self.add_symbol(*span, LINK_LEGEND_TYPE);
                     result
                         .link_occurrences
                         .entry(name.clone())
@@ -151,12 +152,7 @@ impl<'ast> Analyzer<'ast> {
                         .push(*span);
                 }
             }
-            ASTNode::Context { span, .. } => self.semantic_tokens.push(Token {
-                line: span.low().line,
-                col: span.low().column,
-                length: span.len(),
-                token_type: CONTEXT_LEGEND_TYPE,
-            }),
+            ASTNode::Context { span, .. } => self.add_symbol(*span, CONTEXT_LEGEND_TYPE),
             _ => unreachable!(),
         }
         result
@@ -182,12 +178,7 @@ impl<'ast> Analyzer<'ast> {
                 result.extend_rules(self.analyze_rule(rule));
             }
 
-            self.semantic_tokens.push(Token {
-                line: name.1.low().line,
-                col: name.1.low().column,
-                length: name.1.len(),
-                token_type: MEMBRANE_LEGEND_TYPE,
-            });
+            self.add_symbol(name.1, MEMBRANE_LEGEND_TYPE);
 
             let children = std::mem::take(&mut result.symbols);
 
@@ -281,6 +272,16 @@ impl<'ast> Analyzer<'ast> {
                 code_description: None,
             });
         }
+    }
+
+    fn add_symbol(&mut self, span: Span, token_type: u32) {
+        self.semantic_tokens.push(Token {
+            line: span.low().line,
+            col: span.low().column,
+            length: span.len(),
+            token_type,
+        });
+        self.symbols.push(span);
     }
 }
 

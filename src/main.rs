@@ -4,6 +4,7 @@ pub mod capabilities;
 pub mod config;
 pub mod diagnostics;
 pub mod reference;
+pub mod symbol;
 pub mod utils;
 
 use backend::Backend;

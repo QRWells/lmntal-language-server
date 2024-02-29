@@ -146,7 +146,7 @@ impl LanguageServer for Backend {
         if let Some(ref_map) = self.reference_map.get(&uri) {
             let line = param.position.line;
             let col = param.position.character;
-            if let Some(refs) = ref_map.query_with_self(line, col) {
+            if let Some(refs) = ref_map.query_references_with_self(line, col) {
                 Ok(Some(
                     refs.iter()
                         .map(|r| DocumentHighlight {
@@ -155,6 +155,11 @@ impl LanguageServer for Backend {
                         })
                         .collect(),
                 ))
+            } else if let Some(symbol) = ref_map.query(line, col) {
+                Ok(Some(vec![DocumentHighlight {
+                    range: symbol.into(),
+                    kind: None,
+                }]))
             } else {
                 Ok(None)
             }
@@ -210,7 +215,6 @@ impl Backend {
     async fn on_change(&self, doc: TextDocumentItem) {
         let uri = doc.uri;
         let text = doc.text;
-        let mut diagnostics = Diagnostics::default();
 
         if text.is_empty() {
             return;
@@ -219,6 +223,7 @@ impl Backend {
         let mut lexer = lmntalc::LMNtalLexer::new(&src);
         let mut parser = lmntalc::LMNtalParser::new();
 
+        let mut diagnostics = Diagnostics::default();
         let lexing_result = lexer.lex();
         diagnostics.extend(lexing_result.errors);
 
@@ -236,8 +241,10 @@ impl Backend {
         self.semantic_token_map.insert(uri.to_string(), tokens);
         self.document_symbol_map
             .insert(uri.to_string(), analysis_result.doc_symbol);
-        self.reference_map
-            .insert(uri.to_string(), RefereceMap::new(analysis_result.refs));
+        self.reference_map.insert(
+            uri.to_string(),
+            RefereceMap::new(analysis_result.refs, analysis_result.symbols),
+        );
         diagnostics.extend(analysis_result.diagnostics);
 
         self.client
