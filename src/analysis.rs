@@ -61,7 +61,7 @@ impl<'ast> Analyzer<'ast> {
         } = self.ast
         {
             for process_list in process_lists {
-                let res = self.analyze_process_list(process_list);
+                let res = self.analyze_process_list(process_list, true);
                 result.extend(res);
             }
 
@@ -84,11 +84,11 @@ impl<'ast> Analyzer<'ast> {
         }
     }
 
-    fn analyze_process_list(&mut self, ast: &ASTNode) -> AnalysisResult {
+    fn analyze_process_list(&mut self, ast: &ASTNode, top_level: bool) -> AnalysisResult {
         if let ASTNode::ProcessList { processes, .. } = ast {
             let mut result = AnalysisResult::default();
             for process in processes {
-                result.extend(self.analyze_process(process));
+                result.extend(self.analyze_process(process, top_level));
             }
             result
         } else {
@@ -96,7 +96,7 @@ impl<'ast> Analyzer<'ast> {
         }
     }
 
-    fn analyze_process(&mut self, process: &ASTNode) -> AnalysisResult {
+    fn analyze_process(&mut self, process: &ASTNode, top_level: bool) -> AnalysisResult {
         let mut result = AnalysisResult::default();
         match process {
             ASTNode::Membrane { .. } => {
@@ -104,7 +104,7 @@ impl<'ast> Analyzer<'ast> {
             }
             ASTNode::Atom { name, args, .. } => {
                 for arg in args {
-                    result.extend(self.analyze_process(arg));
+                    result.extend(self.analyze_process(arg, false));
                 }
 
                 self.semantic_tokens.push(Token {
@@ -125,7 +125,19 @@ impl<'ast> Analyzer<'ast> {
                     length: span.len(),
                     token_type: LINK_LEGEND_TYPE,
                 });
-                if *hyperlink {
+                if top_level {
+                    self.diagnostics.push(Diagnostic {
+                        range: span_to_range(*span),
+                        severity: Some(tower_lsp::lsp_types::DiagnosticSeverity::ERROR),
+                        code: None,
+                        source: None,
+                        message: "Link at top level".to_string(),
+                        related_information: None,
+                        tags: None,
+                        data: None,
+                        code_description: None,
+                    });
+                } else if *hyperlink {
                     result
                         .hyperlink_occurrences
                         .entry(name.clone())
@@ -161,7 +173,7 @@ impl<'ast> Analyzer<'ast> {
             let mut result = AnalysisResult::default();
 
             for process_list in process_lists {
-                result.extend(self.analyze_process_list(process_list));
+                result.extend(self.analyze_process_list(process_list, false));
             }
 
             self.filter_links_inner(&mut result.link_occurrences);

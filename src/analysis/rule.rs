@@ -46,10 +46,10 @@ impl<'ast> Analyzer<'ast> {
                 };
             }
 
-            let mut result = self.analyze_process_list(head);
+            let mut result = self.analyze_process_list(head, true);
 
             if let Some(propagation) = propagation {
-                result.extend(self.analyze_process_list(propagation));
+                result.extend(self.analyze_process_list(propagation, true));
             }
 
             self.filter_links_inner(&mut result.link_occurrences);
@@ -59,7 +59,7 @@ impl<'ast> Analyzer<'ast> {
             }
 
             if let Some(body) = body {
-                result.extend(self.analyze_process_list(body));
+                result.extend(self.analyze_process_list(body, true));
             }
 
             self.filter_links_top(result.link_occurrences);
