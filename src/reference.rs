@@ -28,6 +28,7 @@ impl RefereceMap {
         }
 
         symbol_seq.sort();
+        symbol_seq.dedup();
         // map every symbol to its index
         let map = symbol_seq
             .iter()

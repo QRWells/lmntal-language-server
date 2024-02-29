@@ -8,7 +8,6 @@ use crate::utils::check_update;
 
 use dashmap::DashMap;
 use lmntalc::util::Source;
-use lmntalc::ASTNode;
 use tokio::sync::RwLock;
 use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::*;
@@ -17,11 +16,9 @@ use tower_lsp::{Client, LanguageServer};
 pub struct Backend {
     client: Client,
     config: RwLock<Config>,
-    ast_map: DashMap<String, ASTNode>,
-    document_map: DashMap<String, Source>,
-    document_symbol_map: DashMap<String, Vec<DocumentSymbol>>,
-    semantic_token_map: DashMap<String, Vec<SemanticToken>>,
-    reference_map: DashMap<String, RefereceMap>,
+    document_symbol_map: DashMap<Url, Vec<DocumentSymbol>>,
+    semantic_token_map: DashMap<Url, Vec<SemanticToken>>,
+    reference_map: DashMap<Url, RefereceMap>,
 }
 
 #[tower_lsp::async_trait]
@@ -129,7 +126,7 @@ impl LanguageServer for Backend {
         &self,
         params: DocumentSymbolParams,
     ) -> Result<Option<DocumentSymbolResponse>> {
-        let uri = params.text_document.uri.to_string();
+        let uri = params.text_document.uri;
         if let Some(symbols) = self.document_symbol_map.get(&uri) {
             Ok(Some(DocumentSymbolResponse::Nested(symbols.clone())))
         } else {
@@ -142,7 +139,7 @@ impl LanguageServer for Backend {
         params: DocumentHighlightParams,
     ) -> Result<Option<Vec<DocumentHighlight>>> {
         let param = params.text_document_position_params;
-        let uri = param.text_document.uri.to_string();
+        let uri = param.text_document.uri;
         if let Some(ref_map) = self.reference_map.get(&uri) {
             let line = param.position.line;
             let col = param.position.character;
@@ -155,11 +152,6 @@ impl LanguageServer for Backend {
                         })
                         .collect(),
                 ))
-            } else if let Some(symbol) = ref_map.query(line, col) {
-                Ok(Some(vec![DocumentHighlight {
-                    range: symbol.into(),
-                    kind: None,
-                }]))
             } else {
                 Ok(None)
             }
@@ -172,7 +164,7 @@ impl LanguageServer for Backend {
         &self,
         params: SemanticTokensParams,
     ) -> Result<Option<SemanticTokensResult>> {
-        let uri = params.text_document.uri.to_string();
+        let uri = params.text_document.uri;
         if let Some(tokens) = self.semantic_token_map.get(&uri) {
             Ok(Some(SemanticTokensResult::Tokens(SemanticTokens {
                 result_id: None,
@@ -204,8 +196,6 @@ impl Backend {
         Self {
             client,
             config: RwLock::new(Config::default()),
-            ast_map: DashMap::new(),
-            document_map: DashMap::new(),
             document_symbol_map: DashMap::new(),
             semantic_token_map: DashMap::new(),
             reference_map: DashMap::new(),
@@ -236,17 +226,14 @@ impl Backend {
         let mut analysis_result = analyzer.analyze();
         let tokens = to_semantic_tokens(&mut analysis_result.semantic_tokens);
 
-        self.ast_map.insert(uri.to_string(), ast);
-        self.document_map.insert(uri.to_string(), src);
-        self.semantic_token_map.insert(uri.to_string(), tokens);
+        self.semantic_token_map.insert(uri.clone(), tokens);
         self.document_symbol_map
-            .insert(uri.to_string(), analysis_result.doc_symbol);
-        self.reference_map.insert(
-            uri.to_string(),
-            RefereceMap::new(analysis_result.refs, analysis_result.symbols),
-        );
-        diagnostics.extend(analysis_result.diagnostics);
+            .insert(uri.clone(), analysis_result.doc_symbol);
 
+        let reference_map = RefereceMap::new(analysis_result.refs, analysis_result.symbols);
+        self.reference_map.insert(uri.clone(), reference_map);
+
+        diagnostics.extend(analysis_result.diagnostics);
         self.client
             .publish_diagnostics(uri, diagnostics.diagnostics, None)
             .await;
